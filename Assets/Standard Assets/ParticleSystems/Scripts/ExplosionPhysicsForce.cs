@@ -12,8 +12,6 @@ namespace UnityStandardAssets.Effects
 
         private IEnumerator Start()
         {
-            // wait one frame because some explosions instantiate debris which should then
-            // be pushed by physics force
             yield return null;
 
             float multiplier = GetComponent<ParticleSystemMultiplier>().multiplier;
