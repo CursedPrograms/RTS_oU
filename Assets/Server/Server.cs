@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine.Networking;
 using UnityEngine;
 
@@ -21,7 +21,7 @@ public class Server : MonoBehaviour
         {
             yield return www.SendWebRequest();
 
-            if (www.isNetworkError || www.isHttpError)
+            if (www.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError("Error: " + www.error);
             }

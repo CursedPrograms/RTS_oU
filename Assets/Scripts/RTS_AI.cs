@@ -165,10 +165,20 @@ public class RTS_AI : MonoBehaviour
 
     public List<ThreatInfo> allThreatInfos = new List<ThreatInfo>();
 
+    // Production planner tuning
+    public float decisionInterval = 0.5f;
+    public int powerMargin = 20;
+    public int powerPerPlant = 100;
+    public int maxRefineries = 3;
+    public int harvestersPerRefinery = 2;
+    public int maxWarFactories = 2;
+    public int maxAttackLimit = 10;
+    float decisionTimer = 0;
+
     void Awake()
     {
-        StartCoroutine("addBuildingOrder");
-        StartCoroutine("addVehicleOrder");
+        // Set early so buildings/units placed in the scene can register in their Start().
+        temp = this;
     }
 
     void Start()
@@ -195,42 +205,99 @@ public class RTS_AI : MonoBehaviour
         attackAIs[0].giveOrder(4);
     }
 
-    IEnumerator addBuildingOrder()
+    int countBuildings(int id)
     {
-        BuildingBuildOrder.Add(100);
-        BuildingBuildOrder.Add(101);
-        BuildingBuildOrder.Add(102);
-        BuildingBuildOrder.Add(103);
-        BuildingBuildOrder.Add(105);
-        BuildingBuildOrder.Add(106);
-
-        while (buildingAddCycle > 0)
-        {
-            buildingAddCycle--;
-            yield return new WaitForSeconds(1);
-            BuildingBuildOrder.Add(101);
-            BuildingBuildOrder.Add(101);
-            BuildingBuildOrder.Add(103);
-
-            if (buildingAddCycle > 3)
-            {
-                BuildingBuildOrder.Add(105);
-            }
-
-            if (buildingAddCycle > 0)
-            {
-                StartCoroutine(addBuildingOrder());
-            }
-        }
+        int n = 0;
+        foreach (int b in myBuildingIDs) if (b == id) n++;
+        return n;
     }
 
-    IEnumerator addVehicleOrder()
+    int countHarvesters()
     {
-        while (true)
+        Harvesters.RemoveAll(h => h == null);
+        int n = 0;
+        foreach (GameObject g in GameObject.FindGameObjectsWithTag("npc"))
         {
-            yield return new WaitForSeconds(0.1f);
-            VehicleBuildOrder.Add(141);
+            Unit_Core core = g.GetComponent<Unit_Core>();
+            if (core != null && core.Stats.isOreTruck) n++;
         }
+        return n;
+    }
+
+    DB_Item findItem(List<List<DB_Item>> lists, int id)
+    {
+        if (lists.Count == 0) return null;
+        foreach (DB_Item i in lists[0])
+        {
+            if (i.ID == id) return i;
+        }
+        return null;
+    }
+
+    // Picks the next building based on what the base is missing, instead of a fixed list.
+    // Only returns items that are currently buildable, so one locked item never stalls the queue.
+    DB_Item chooseNextBuilding()
+    {
+        if (CommandCentre == null || CurrentBuildingItems.Count == 0) return null;
+
+        int spare = TotalPower - TotalConsumption;
+        List<int> wanted = new List<int>();
+
+        if (spare < powerMargin) wanted.Add(101);
+        if (countBuildings(103) == 0) wanted.Add(103);
+        if (countBuildings(102) == 0) wanted.Add(102);
+        if (countBuildings(105) == 0) wanted.Add(105);
+        if (countBuildings(103) < 2) wanted.Add(103);
+        if (countBuildings(106) == 0) wanted.Add(106);
+        if (countBuildings(103) < maxRefineries && Money < 1500) wanted.Add(103);
+        if (countBuildings(105) < maxWarFactories && Money > 2000) wanted.Add(105);
+        if (spare < powerMargin * 3) wanted.Add(101);
+
+        foreach (int id in wanted)
+        {
+            if (!availableEnemyBuildings.Contains(id)) continue;
+            DB_Item item = findItem(CurrentBuildingItems, id);
+            if (item == null) continue;
+
+            // Don't brown out the base: build power first if this would push us negative.
+            if (id != 101 && spare - item.PowerConsumption < 0)
+            {
+                DB_Item power = findItem(CurrentBuildingItems, 101);
+                if (power != null) return power;
+                continue;
+            }
+            return item;
+        }
+        return null;
+    }
+
+    DB_Item chooseNextVehicle()
+    {
+        if (CurrentVehicleItems.Count == 0) return null;
+
+        int refineries = Refineries.Count;
+        int wantHarvesters = Mathf.Max(refineries > 0 ? 1 : 0, refineries * harvestersPerRefinery);
+        if (countHarvesters() < wantHarvesters)
+        {
+            DB_Item harvester = findItem(CurrentVehicleItems, 142);
+            if (harvester != null) return harvester;
+        }
+
+        // Save money for the base while it's still being built up.
+        if (CreatingBuilding && Money < 600) return null;
+
+        LightVehicles.RemoveAll(g => g == null);
+        HeavyVehicles.RemoveAll(g => g == null);
+        DB_Item heavy = findItem(CurrentVehicleItems, 143);
+        if (heavy != null && Money >= heavy.Cost && HeavyVehicles.Count * 2 <= LightVehicles.Count)
+        {
+            return heavy;
+        }
+
+        DB_Item light = findItem(CurrentVehicleItems, 141);
+        if (light != null && Money >= light.Cost) return light;
+
+        return null;
     }
 
     void Update()
@@ -301,20 +368,13 @@ public class RTS_AI : MonoBehaviour
                 }
             }
 
-            if (MCVs)
-            {
-
-            }
-            else
-            {
-                if (BuildingBuildOrder[0] == 100)
-                {
-
-                }
-            }
-
             FirstRun = false;
         }
+
+        decisionTimer += Time.deltaTime;
+        bool decide = decisionTimer >= decisionInterval;
+        if (decide) decisionTimer = 0;
+
         lowThreat = Physics.OverlapSphere(rangeCenterFinal, longRange, 1 << 8);
         foreach (MediumLevel m in defendAIs)
         {
@@ -339,6 +399,7 @@ public class RTS_AI : MonoBehaviour
                     float dist = 100000.0f;
                     foreach (MediumLevel m in defendAIs)
                     {
+                        if (m.Units.Count == 0) continue;
                         if (!m.underOrders() && Vector3.Distance(m.GetLocation(), c.transform.position) < dist)
                         {
                             dist = Vector3.Distance(m.GetLocation(), c.transform.position);
@@ -354,20 +415,17 @@ public class RTS_AI : MonoBehaviour
             }
         }
 
-        if (!CreatingBuilding && BuildingBuildOrder.Count > 0 && availableEnemyBuildings.Contains(BuildingBuildOrder[0]) && CurrentBuildingItems.Count > 0)
+        if (!CreatingBuilding && decide)
         {
-            CreatingBuilding = true;
-            foreach (DB_Item i in CurrentBuildingItems[0])
+            DB_Item next = chooseNextBuilding();
+            if (next != null)
             {
-                if (i.ID == BuildingBuildOrder[0])
-                {
-                    i.startBuilding();
-                    currentBuildingItem = i;
-                    break;
-                }
+                CreatingBuilding = true;
+                next.startBuilding();
+                currentBuildingItem = next;
             }
         }
-        else if (CreatingBuilding && CurrentBuildingItems.Count > 0)
+        else if (CreatingBuilding && CurrentBuildingItems.Count > 0 && CommandCentre != null)
         {
             if (currentBuildingItem.isFinished)
             {
@@ -434,6 +492,7 @@ public class RTS_AI : MonoBehaviour
                     objTemp = (GameObject)Instantiate(Radar, grid.mGrid.mainGrid[tempInt[0], tempInt[1]].center + new Vector3(xOffset, 0, zOffset), Radar.transform.rotation);
                 }
 
+                objTemp.GetComponent<Building_Controller>().powerConsumption = currentBuildingItem.PowerConsumption;
                 objTemp.GetComponent<Building_Controller>().placed();
                 objTemp.GetComponent<Building_Controller>().targetY = objTemp.transform.position.y;
                 addBuilding(objTemp.GetComponent<Building_Controller>());
@@ -445,18 +504,14 @@ public class RTS_AI : MonoBehaviour
         if (VehicleFactories.Count > 0)
         {
 
-            if (VehicleBuildOrder.Count > 0 && !CreatingVehicle)
+            if (!CreatingVehicle && decide)
             {
-                foreach (DB_Item i in CurrentVehicleItems[0])
+                DB_Item next = chooseNextVehicle();
+                if (next != null)
                 {
-                    if (i.ID == VehicleBuildOrder[0])
-                    {
-                        CurrentVehicleItem = i;
-                        CurrentVehicleItem.startBuilding();
-                        VehicleBuildOrder.Remove(i.ID);
-                        CreatingVehicle = true;
-                        break;
-                    }
+                    CurrentVehicleItem = next;
+                    CurrentVehicleItem.startBuilding();
+                    CreatingVehicle = true;
                 }
             }
             else if (CreatingVehicle)
@@ -710,6 +765,13 @@ public class RTS_AI : MonoBehaviour
 
     public void requestAI(GameObject unit)
     {
+        DB_Item unitItem = unit.GetComponent<Unit_Core>().getItem();
+        if (unitItem != null)
+        {
+            if (unitItem.ID == 141 && !LightVehicles.Contains(unit)) LightVehicles.Add(unit);
+            else if (unitItem.ID == 143 && !HeavyVehicles.Contains(unit)) HeavyVehicles.Add(unit);
+        }
+
         int nDefend = defendAIs.Count;
         int nExplore = exploreAIs.Count;
         int nPatrol = patrolAIs.Count;
@@ -770,6 +832,8 @@ public class RTS_AI : MonoBehaviour
 
             if (attackAIs[numMidAttack - 1].Units.Count >= midAttackLimit)
             {
+                // Each new wave is a bit bigger than the last.
+                midAttackLimit = Mathf.Min(midAttackLimit + 1, maxAttackLimit);
                 attackAIs.Add(gameObject.AddComponent<MediumLevel>());
 
                 numMidAttack++;
@@ -1238,16 +1302,25 @@ public class RTS_AI : MonoBehaviour
         }
         else if (b.ID == 106)
         {
-            if (!myBuildingIDs.Contains(b.ID))
+            // Radar unlocks heavy tanks at every AI war factory.
+            if (!myBuildingIDs.Contains(b.ID) && !availableVehicles.Contains(143))
             {
-                if (myBuildingIDs.Contains(105))
+                availableVehicles.Add(143);
+
+                for (int f = 0; f < CurrentVehicleItems.Count; f++)
                 {
-                    availableBuildings.Add(107);
+                    if (VehicleFriendly[f]) continue;
+                    iTemp = DB_Database.temp.returnItem(4, 143);
+                    iTemp.BuiltByAI = true;
+                    iTemp.Parent = VehicleFactories[f];
+                    CurrentVehicleItems[f].Add(iTemp);
+                    CurrentVehicleItems[f].Sort();
                 }
             }
         }
 
         TotalConsumption += b.powerConsumption;
+        if (b.ID == 101) TotalPower += powerPerPlant;
         myBuildings.Add(b);
         myBuildingIDs.Add(b.ID);
     }
@@ -1296,6 +1369,11 @@ public class RTS_AI : MonoBehaviour
                 availableEnemyBuildings.Remove(101);
             }
 
+            if (b.gameObject == CommandCentre)
+            {
+                CommandCentre = null;
+                CreatingBuilding = false;
+            }
         }
     }
 
@@ -1328,21 +1406,48 @@ public class RTS_AI : MonoBehaviour
         }
         if (g.GetComponent<Unit_Core>().getItem().ID == 142)
         {
+            // Replacement harvesters are picked up by chooseNextVehicle().
             Harvesters.Remove(g);
-            VehicleBuildOrder.Add(142);
+        }
+        if (g.GetComponent<Unit_Core>().getItem().ID == 143)
+        {
+            HeavyVehicles.Remove(g);
         }
     }
 
     public void removeBuilding(GameObject g)
     {
-        if (g.GetComponent<Building_Controller>().ID == 100)
-        {
-            removeBuilding(g.GetComponent<Building_Controller>(), false);
+        Building_Controller b = g.GetComponent<Building_Controller>();
+        Buildings.Remove(g);
+        Defense.Remove(g);
 
-        }
-        else if (g.GetComponent<Building_Controller>().ID == 103)
+        if (b.ID == 100)
         {
-            BuildingBuildOrder.Add(103);
+            removeBuilding(b, false);
+        }
+        else
+        {
+            // Keep counts accurate so the planner rebuilds what was lost.
+            myBuildings.Remove(b);
+            myBuildingIDs.Remove(b.ID);
+        }
+
+        TotalConsumption -= b.powerConsumption;
+        if (b.ID == 101) TotalPower -= powerPerPlant;
+        InfantryFactories.Remove(g);
+
+        int f = VehicleFactories.IndexOf(g);
+        if (f >= 0)
+        {
+            if (CreatingVehicle && CurrentVehicleItem != null && CurrentVehicleItem.Parent == g)
+            {
+                CurrentVehicleItem.cancel(true);
+                CreatingVehicle = false;
+            }
+            VehicleFactories.RemoveAt(f);
+            CurrentVehicleItems.RemoveAt(f);
+            VehicleFriendly.RemoveAt(f);
+            NumberVehicles--;
         }
     }
 
@@ -1428,7 +1533,7 @@ public class RTS_AI : MonoBehaviour
 
     public bool isThreat(Collider c)
     {
-        if (lowThreat.Contains(c))
+        if (lowThreat != null && lowThreat.Contains(c))
         {
             return true;
         }

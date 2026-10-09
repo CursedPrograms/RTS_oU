@@ -21,7 +21,7 @@ public class Laser_Controller : MonoBehaviour
 
     private bool friendly = false;
 
-    private ParticleRenderer laserBeam;
+    private ParticleSystemRenderer laserBeam;
     private LightningBolt laserScript;
 
     private List<GameObject> laserLights = new List<GameObject>();
@@ -33,7 +33,7 @@ public class Laser_Controller : MonoBehaviour
     void Start()
     {
         counter = rateOfFire;
-        laserBeam = GetComponentInChildren<ParticleRenderer>();
+        laserBeam = GetComponentInChildren<ParticleSystemRenderer>();
         laserScript = GetComponentInChildren<LightningBolt>();
         laserBeam.enabled = false;
     }

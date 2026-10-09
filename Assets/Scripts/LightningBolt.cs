@@ -1,5 +1,6 @@
 using UnityEngine;
 
+[RequireComponent(typeof(ParticleSystem))]
 public class LightningBolt : MonoBehaviour
 {
 	public Transform target;
@@ -10,34 +11,45 @@ public class LightningBolt : MonoBehaviour
 	public Light startLight;
 	public Light endLight;
 	public Vector3 targetPos = Vector3.zero;
-	
+
 	Perlin noise;
 	float oneOverZigs;
-	
-	private Particle[] particles;
-	
+
+	private ParticleSystem ps;
+	private ParticleSystem.Particle[] particles;
+
 	void Start()
 	{
 		oneOverZigs = 1f / (float)zigs;
-		GetComponent<ParticleEmitter>().emit = false;
+		ps = GetComponent<ParticleSystem>();
 
-		GetComponent<ParticleEmitter>().Emit(zigs);
-		particles = GetComponent<ParticleEmitter>().particles;
+		// Particles are positioned by hand every frame, so the system only acts as a renderer.
+		var main = ps.main;
+		main.simulationSpace = ParticleSystemSimulationSpace.World;
+		main.maxParticles = Mathf.Max(main.maxParticles, zigs);
+		var emission = ps.emission;
+		emission.enabled = false;
+
+		ps.Emit(zigs);
+		particles = new ParticleSystem.Particle[zigs];
+		ps.GetParticles(particles);
 	}
-	
+
 	public void Update ()
 	{
+		if (particles == null) return;
+
 		if (target != null || targetPos != Vector3.zero)
 		{
 			if (targetPos != Vector3.zero) targetVector = targetPos;
 			else targetVector = target.position;
 			if (noise == null)
 				noise = new Perlin();
-			
+
 			float timex = Time.time * speed * 0.1365143f;
 			float timey = Time.time * speed * 1.21688f;
-			float timez = Time.time * speed * 2.5564f;		
-		
+			float timez = Time.time * speed * 2.5564f;
+
 			for (int i=0; i < particles.Length; i++)
 			{
 				Vector3 position = Vector3.Lerp(transform.position, targetVector, oneOverZigs * (float)i);
@@ -45,15 +57,17 @@ public class LightningBolt : MonoBehaviour
 											noise.Noise(timey + position.x, timey + position.y, timey + position.z),
 											noise.Noise(timez + position.x, timez + position.y, timez + position.z));
 				position += (offset * scale * ((float)i * oneOverZigs));
-			
+
 				particles[i].position = position;
-				particles[i].color = Color.white;
-				particles[i].energy = 1f;
+				particles[i].startColor = Color.white;
+				particles[i].startLifetime = 1f;
+				particles[i].remainingLifetime = 1f;
+				particles[i].velocity = Vector3.zero;
 			}
-		
-			GetComponent<ParticleEmitter>().particles = particles;
-		
-			if (GetComponent<ParticleEmitter>().particleCount >= 2)
+
+			ps.SetParticles(particles, particles.Length);
+
+			if (particles.Length >= 2)
 			{
 				if (startLight)
 					startLight.transform.position = particles[0].position;
@@ -61,5 +75,5 @@ public class LightningBolt : MonoBehaviour
 					endLight.transform.position = particles[particles.Length - 1].position;
 			}
 		}
-	}	
+	}
 }

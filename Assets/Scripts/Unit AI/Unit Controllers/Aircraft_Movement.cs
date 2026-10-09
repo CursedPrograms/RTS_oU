@@ -58,8 +58,8 @@ public class Aircraft_Movement : MonoBehaviour
     private Vector3 targetDir;
 
     private TrailRenderer[] trails;
-    private ParticleRenderer engine;
-    private float[] emitSpeed = new float[2];
+    private ParticleSystem engine;
+    private float emitSpeed;
 
     private float bankRadius;
     private float stuckTimer = 0;
@@ -81,7 +81,7 @@ public class Aircraft_Movement : MonoBehaviour
         currentAmmo = maxAmmo;
         approachSpeed = speed * 0.15f;
         trails = GetComponentsInChildren<TrailRenderer>();
-        engine = GetComponentInChildren<ParticleRenderer>();
+        engine = GetComponentInChildren<ParticleSystem>();
         if (hasFans)
         {
             fans[0] = transform.Find("FanL");
@@ -90,11 +90,12 @@ public class Aircraft_Movement : MonoBehaviour
 
         bankRadius = 360 / bankForce;
 
-        emitSpeed[0] = engine.GetComponent<ParticleEmitter>().minEmission;
-        emitSpeed[1] = engine.GetComponent<ParticleEmitter>().maxEmission;
-
-        engine.GetComponent<ParticleEmitter>().minEmission = 0;
-        engine.GetComponent<ParticleEmitter>().maxEmission = 0;
+        if (engine)
+        {
+            var emission = engine.emission;
+            emitSpeed = emission.rateOverTimeMultiplier;
+            emission.rateOverTimeMultiplier = 0;
+        }
 
         loadMissile(0);
         loadMissile(1);
@@ -121,15 +122,10 @@ public class Aircraft_Movement : MonoBehaviour
                 t.enabled = true;
             }
 
-            if (engine.GetComponent<ParticleEmitter>().minEmission < emitSpeed[0])
+            if (engine)
             {
-                engine.GetComponent<ParticleEmitter>().minEmission += 4;
-                engine.GetComponent<ParticleEmitter>().maxEmission += 4;
-            }
-            else
-            {
-                engine.GetComponent<ParticleEmitter>().minEmission = emitSpeed[0];
-                engine.GetComponent<ParticleEmitter>().maxEmission = emitSpeed[1];
+                var emission = engine.emission;
+                emission.rateOverTimeMultiplier = Mathf.Min(emitSpeed, emission.rateOverTimeMultiplier + 4);
             }
 
         }
@@ -140,13 +136,11 @@ public class Aircraft_Movement : MonoBehaviour
                 t.enabled = false;
             }
 
-            engine.GetComponent<ParticleEmitter>().minEmission -= 1;
-            engine.GetComponent<ParticleEmitter>().maxEmission -= 1;
-
-            if (engine.GetComponent<ParticleEmitter>().minEmission < 0.5f)
+            if (engine)
             {
-                engine.GetComponent<ParticleEmitter>().minEmission = 0;
-                engine.GetComponent<ParticleEmitter>().maxEmission = 0;
+                var emission = engine.emission;
+                float rate = emission.rateOverTimeMultiplier - 1;
+                emission.rateOverTimeMultiplier = rate < 0.5f ? 0 : rate;
             }
         }
 

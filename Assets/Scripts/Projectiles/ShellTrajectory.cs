@@ -37,6 +37,8 @@ public class ShellTrajectory : MonoBehaviour
 
     bool HasReachedTarget()
     {
+        // Target died mid-flight: treat as reached so the shell cleans itself up.
+        if (!TargetTransform) return true;
         return Vector3.Distance(transform.position, TargetTransform.position) < 0.3f;
     }
 

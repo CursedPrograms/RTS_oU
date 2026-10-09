@@ -16,13 +16,13 @@ public class TeslaCoil_Controller : MonoBehaviour
 
     bool Friendly = false;
 
-    ParticleRenderer Arc;
+    ParticleSystemRenderer Arc;
     LightningBolt Lightning;
 
     void Start()
     {
         Counter = RateOfFire;
-        Arc = GetComponentInChildren<ParticleRenderer>();
+        Arc = GetComponentInChildren<ParticleSystemRenderer>();
         Lightning = GetComponentInChildren<LightningBolt>();
         Arc.enabled = false;
     }

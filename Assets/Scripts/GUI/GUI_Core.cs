@@ -1322,15 +1322,15 @@ public class GUI_Core : MonoBehaviour
         bLterrainCoord.x = bottomLeft.x / Terrain.activeTerrain.terrainData.size.x;
         bLterrainCoord.z = bottomLeft.z / Terrain.activeTerrain.terrainData.size.z;
 
-        int bLx = (int)(bLterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapWidth);
-        int bLy = (int)(bLterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapHeight);
+        int bLx = (int)(bLterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapResolution);
+        int bLy = (int)(bLterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapResolution);
 
         Vector3 tRterrainCoord = Vector3.zero;
         tRterrainCoord.x = topRight.x / Terrain.activeTerrain.terrainData.size.x;
         tRterrainCoord.z = topRight.z / Terrain.activeTerrain.terrainData.size.z;
 
-        int tRx = (int)(tRterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapWidth);
-        int tRy = (int)(tRterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapHeight);
+        int tRx = (int)(tRterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapResolution);
+        int tRy = (int)(tRterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapResolution);
 
         float[,] heightMap = Terrain.activeTerrain.terrainData.GetHeights(bLx, bLy, tRx - bLx + 1, tRy - bLy + 1);
 

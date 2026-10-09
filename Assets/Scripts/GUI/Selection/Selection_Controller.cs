@@ -241,7 +241,6 @@ public class Selection_Controller : MonoBehaviour
         foreach (GameObject g in Objects)
         {
             g.GetComponent<Selected>().isSelected = false;
-            Destroy(g.GetComponent<GUITexture>());
         }
 
         Objects.Clear();
@@ -250,7 +249,6 @@ public class Selection_Controller : MonoBehaviour
     public void deselect(GameObject g)
     {
         g.GetComponent<Selected>().isSelected = false;
-        Destroy(g.GetComponent<GUITexture>());
         Objects.Remove(g);
     }
 

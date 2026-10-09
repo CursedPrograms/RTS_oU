@@ -39,6 +39,9 @@ public class MediumLevel : MonoBehaviour
 
     void Update()
     {
+        Units.RemoveAll(u => u == null);
+        if (Units.Count == 0) return;
+
         int counter = 0;
         AverageLocation = new Vector3();
         foreach (GameObject g in Units)
@@ -117,17 +120,14 @@ public class MediumLevel : MonoBehaviour
 
                 if (!GoToTarget)
                 {
-                    bool attackBuilding = false;
-                    AttackTarget = GameObject.FindGameObjectWithTag("Player");
+                    bool attackBuilding;
+                    AttackTarget = findClosestTarget(out attackBuilding);
 
-                    if (AttackTarget == null)
+                    if (AttackTarget != null)
                     {
-                        AttackTarget = GameObject.FindGameObjectWithTag("fBuilding");
-                        attackBuilding = true;
+                        GoToTarget = true;
+                        setAttackTarget(AttackTarget, attackBuilding, 4);
                     }
-
-                    GoToTarget = true;
-                    setAttackTarget(AttackTarget, attackBuilding, 4);
                 }
             }
         }
@@ -135,6 +135,43 @@ public class MediumLevel : MonoBehaviour
         {
 
         }
+    }
+
+    // Nearest player unit or building to the group. Units are preferred unless a building is much closer.
+    GameObject findClosestTarget(out bool isBuilding)
+    {
+        GameObject bestUnit = closestWithTag("Player");
+        GameObject bestBuilding = closestWithTag("fBuilding");
+        isBuilding = false;
+
+        if (bestUnit == null && bestBuilding == null) return null;
+        if (bestUnit == null) { isBuilding = true; return bestBuilding; }
+        if (bestBuilding == null) return bestUnit;
+
+        float unitDist = Vector3.Distance(AverageLocation, bestUnit.transform.position);
+        float buildingDist = Vector3.Distance(AverageLocation, bestBuilding.transform.position);
+        if (buildingDist * 2f < unitDist)
+        {
+            isBuilding = true;
+            return bestBuilding;
+        }
+        return bestUnit;
+    }
+
+    GameObject closestWithTag(string tag)
+    {
+        GameObject best = null;
+        float bestDist = float.MaxValue;
+        foreach (GameObject g in GameObject.FindGameObjectsWithTag(tag))
+        {
+            float d = (g.transform.position - AverageLocation).sqrMagnitude;
+            if (d < bestDist)
+            {
+                bestDist = d;
+                best = g;
+            }
+        }
+        return best;
     }
 
     public Vector3 GetLocation()
@@ -166,6 +203,7 @@ public class MediumLevel : MonoBehaviour
 
     public void setAttackTarget(GameObject target, bool building, int command)
     {
+        if (target == null) return;
         this.Target = target;
         foreach (GameObject g in Units)
         {
@@ -177,7 +215,7 @@ public class MediumLevel : MonoBehaviour
             DfaultOrder = false;
             OrderGiven = true;
             TargetInfo = target.GetComponent<ThreatInfo>();
-            TargetInfo.addHandler(this);
+            if (TargetInfo != null) TargetInfo.addHandler(this);
         }
 
         LastOrder = new LastOrder("attack", target, command);
@@ -206,8 +244,14 @@ public class MediumLevel : MonoBehaviour
         g.GetComponent<Unit_Logic>().removeController();
         RTS_AI.temp.RequestUnit(this);
         Units.Remove(g);
-        GoForAttack = false;
-        GoToTarget = false;
+
+        // Only fall back and regroup once the wave has lost half its strength,
+        // instead of retreating every time a single unit dies.
+        if (Units.Count * 2 < UnitLimit)
+        {
+            GoForAttack = false;
+            GoToTarget = false;
+        }
     }
 
     public void giveOrder(int o)

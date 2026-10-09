@@ -95,15 +95,15 @@ public class Building_Controller : MonoBehaviour
         bLterrainCoord.x = bottomLeft.x / Terrain.activeTerrain.terrainData.size.x;
         bLterrainCoord.z = bottomLeft.z / Terrain.activeTerrain.terrainData.size.z;
 
-        int bLx = (int)(bLterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapWidth);
-        int bLy = (int)(bLterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapHeight);
+        int bLx = (int)(bLterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapResolution);
+        int bLy = (int)(bLterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapResolution);
 
         Vector3 tRterrainCoord = Vector3.zero;
         tRterrainCoord.x = topRight.x / Terrain.activeTerrain.terrainData.size.x;
         tRterrainCoord.z = topRight.z / Terrain.activeTerrain.terrainData.size.z;
 
-        int tRx = (int)(tRterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapWidth);
-        int tRy = (int)(tRterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapHeight);
+        int tRx = (int)(tRterrainCoord.x * Terrain.activeTerrain.terrainData.heightmapResolution);
+        int tRy = (int)(tRterrainCoord.z * Terrain.activeTerrain.terrainData.heightmapResolution);
 
         float[,] heightMap = Terrain.activeTerrain.terrainData.GetHeights(bLx, bLy, tRx - bLx + 1, tRy - bLy + 1);
 
@@ -147,14 +147,12 @@ public class Building_Controller : MonoBehaviour
             {
                 transform.position = new Vector3(transform.position.x, targetY, transform.position.z);
                 justBeenPlaced = false;
-                Dust[0].GetComponent<ParticleEmitter>().minEmission = 0;
-                Dust[0].GetComponent<ParticleEmitter>().maxEmission = 0;
-                Dust[1].GetComponent<ParticleEmitter>().minEmission = 0;
-                Dust[1].GetComponent<ParticleEmitter>().maxEmission = 0;
-                Dust[2].GetComponent<ParticleEmitter>().minEmission = 0;
-                Dust[2].GetComponent<ParticleEmitter>().maxEmission = 0;
-                Dust[3].GetComponent<ParticleEmitter>().minEmission = 0;
-                Dust[3].GetComponent<ParticleEmitter>().maxEmission = 0;
+                foreach (GameObject dust in Dust)
+                {
+                    if (dust == null) continue;
+                    foreach (ParticleSystem ps in dust.GetComponentsInChildren<ParticleSystem>())
+                        ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                }
             }
         }
 
@@ -251,8 +249,12 @@ public class Building_Controller : MonoBehaviour
 
     public void DestroyUnit()
     {
-        RTS_Player.temp.TotalConsumption -= powerConsumption;
-        RTS_Player.temp.Buildings.Remove(gameObject);
+        // AI buildings (layer 13) are accounted for in RTS_AI.removeBuilding.
+        if (gameObject.layer != 13)
+        {
+            RTS_Player.temp.TotalConsumption -= powerConsumption;
+            RTS_Player.temp.Buildings.Remove(gameObject);
+        }
 
         if (Selection_Controller.temp.BuildingObjects.Contains(gameObject))
         {
